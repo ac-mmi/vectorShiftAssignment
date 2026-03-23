@@ -1,0 +1,126 @@
+.pipeline-toolbar {
+  background: linear-gradient(180deg, #1f1f4a 0%, #1b1b44 100%);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.35);
+  box-shadow: 0 4px 14px rgba(2, 6, 23, 0.35);
+  padding: 8px 10px 10px;
+}
+
+.pipeline-toolbar__tabs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.35);
+}
+
+.pipeline-toolbar__logo {
+  width: 25px;
+  height: 25px;
+  border-radius: 8px;
+  object-fit: cover;
+  margin-right: 8px;
+  flex: 0 0 auto;
+}
+
+.pipeline-toolbar__tab {
+  border: 1px solid transparent;
+  background: transparent;
+  color: #c7c8ff;
+  padding: 7px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.pipeline-toolbar__tab:hover {
+  color: #f2f2ff;
+  background: rgba(129, 140, 248, 0.18);
+}
+
+.pipeline-toolbar__tab.is-active {
+  background: #6366f1;
+  color: #ffffff;
+  border-color: #6366f1;
+  font-weight: 600;
+}
+
+.pipeline-toolbar__panel {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-top: 2px;
+  animation: ribbonFade 0.2s ease;
+}
+
+.pipeline-toolbar__group {
+  min-width: 280px;
+  background: rgba(31, 29, 79, 0.72);
+  border: 1px solid rgba(129, 140, 248, 0.35);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.pipeline-toolbar__group-content {
+  min-height: 70px;
+}
+
+.pipeline-toolbar__actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.pipeline-toolbar__group-title {
+  margin-top: 8px;
+  text-align: center;
+  color: #b9bcff;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.ribbon-action-btn {
+  border: 1px solid rgba(129, 140, 248, 0.35);
+  background: #2a2f75;
+  color: #eef0ff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.ribbon-action-btn:hover {
+  border-color: #a5b4fc;
+  transform: translateY(-1px);
+  background: #343b8f;
+}
+
+.ribbon-action-btn__icon {
+  color: #c7d2fe;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.ribbon-action-btn__label {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+@keyframes ribbonFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
