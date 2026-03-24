@@ -1,48 +1,80 @@
 // textNode.js
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BaseNode } from './BaseNode';
 import { useStore } from '../store';
+import { useUpdateNodeInternals } from 'reactflow';
+
+const fallbackFromId = (nodeId) => String(nodeId || '').replace('customInput-', 'input_');
+
+function resolveInputName(node) {
+  return String(node?.data?.inputName || '').trim() || fallbackFromId(node?.id);
+}
 
 export const TextNode = ({ id, data }) => {
   console.log('🟡 Rendering TextNode', id);
   const [currText, setCurrText] = useState(data?.text || '{{input}}');
   const nodes = useStore((state) => state.nodes);
+  const edges = useStore((state) => state.edges);
+  const updateNodeField = useStore((state) => state.updateNodeField);
 
   const textareaId = `${id}-text`;
+  const genericInputHandleId = `${id}-input`;
+  const syncVersionRef = useRef(0);
+  const updateNodeInternals = useUpdateNodeInternals();
+  const textareaRef = useRef(null);
+  const [caretIndex, setCaretIndex] = useState(0);
+  const [autocompleteOpen, setAutocompleteOpen] = useState(false);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
 
   const handleTextChange = (e) => {
-    setCurrText(e.target.value);
+    const nextText = e.target.value;
+    setCurrText(nextText);
+    updateNodeField(id, 'text', nextText);
+    setCaretIndex(e.target.selectionStart || 0);
   };
 
-  // Extract variables from the current text using {{variable}} syntax.
-  // JS naming rules: first char [A-Za-z_$], then [A-Za-z0-9_$]*.
-  const variables = useMemo(() => {
-    // Allow whitespace inside {{ ... }} and extract only the identifier.
-    const regex = /\{\{\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\}\}/g;
+  const inputNames = useMemo(
+    () =>
+      nodes
+        .filter((n) => n.type === 'customInput')
+        .map((n) => resolveInputName(n))
+        .filter(Boolean),
+    [nodes]
+  );
+
+  // Extract raw fully formed tokens from current text for warning UI.
+  const parsedTokenInfo = useMemo(() => {
+    const regex = /\{\{(.*?)\}\}/g;
     const matches = [...currText.matchAll(regex)];
-    const seen = new Set();
-    const varsInOrder = [];
+    const validIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+    const seenValid = new Set();
+    const seenInvalid = new Set();
+    const validVariables = [];
+    const invalidVariables = [];
 
     for (const match of matches) {
-      const v = match[1];
-      if (!seen.has(v)) {
-        seen.add(v);
-        varsInOrder.push(v);
+      const candidate = String(match[1] || '').trim();
+      if (validIdentifier.test(candidate)) {
+        if (!seenValid.has(candidate)) {
+          seenValid.add(candidate);
+          validVariables.push(candidate);
+        }
+      } else if (candidate && !seenInvalid.has(candidate)) {
+        seenInvalid.add(candidate);
+        invalidVariables.push(candidate);
       }
     }
 
-    return varsInOrder;
+    return { validVariables, invalidVariables };
   }, [currText]);
 
-  // Soft validation: highlights variables without matching inputs
-  // Does not block user to maintain flexible pipeline creation
-  const inputNames = useMemo(() => {
-    return nodes
-      .filter((n) => n.type === 'customInput')
-      .map((n) => n.data?.inputName)
-      .filter(Boolean);
-  }, [nodes]);
+  // Extract valid fully formed variables for sync.
+  // Uses /{{(.*?)}}/g then validates JS-like identifier names.
+  const variables = useMemo(() => {
+    return parsedTokenInfo.validVariables;
+  }, [parsedTokenInfo.validVariables]);
+  console.log('🟡 Parsed Variables:', variables);
 
   const missing = useMemo(() => {
     return variables.filter((v) => !inputNames.includes(v));
@@ -50,9 +82,346 @@ export const TextNode = ({ id, data }) => {
 
   const missingSet = useMemo(() => new Set(missing), [missing]);
 
+  const inputNodesByName = useMemo(() => {
+    const map = new Map();
+    nodes.forEach((node) => {
+      if (node.type === 'customInput') {
+        const resolvedInputName = resolveInputName(node);
+        if (resolvedInputName) {
+          map.set(resolvedInputName, node);
+        }
+      }
+    });
+    return map;
+  }, [nodes]);
+
+  const inputTextEdges = useMemo(() => {
+    return edges.filter((edge) => {
+      if (edge.target !== id) return false;
+      const sourceNode = nodes.find((n) => n.id === edge.source);
+      return sourceNode?.type === 'customInput';
+    });
+  }, [edges, id, nodes]);
+
+  const hasVariableEdge = useCallback(
+    (allEdges, variableName) =>
+      allEdges.some(
+        (edge) =>
+          edge.target === id &&
+          edge.data?.type === 'variable' &&
+          edge.data?.createdBy === id &&
+          edge.data?.variableName === variableName
+      ),
+    [id]
+  );
+
+  // Edge -> variable awareness only (non-intrusive; no textarea mutation).
+  const connectedVariables = useMemo(() => {
+    const vars = [];
+    inputTextEdges.forEach((edge) => {
+      const sourceNode = nodes.find((n) => n.id === edge.source);
+      const resolvedInputName = resolveInputName(sourceNode);
+      if (resolvedInputName && !vars.includes(resolvedInputName)) {
+        vars.push(resolvedInputName);
+      }
+    });
+    return vars;
+  }, [inputTextEdges, nodes]);
+
+  const manualGenericEdges = useMemo(
+    () =>
+      inputTextEdges.filter(
+        (edge) => edge.targetHandle === genericInputHandleId && edge.data?.type === 'manual'
+      ),
+    [genericInputHandleId, inputTextEdges]
+  );
+
+  const unusedManualConnections = useMemo(() => {
+    const names = [];
+    manualGenericEdges.forEach((edge) => {
+      const sourceNode = nodes.find((n) => n.id === edge.source);
+      const resolved = resolveInputName(sourceNode);
+      if (resolved && !variables.includes(resolved) && !names.includes(resolved)) {
+        names.push(resolved);
+      }
+    });
+    return names;
+  }, [manualGenericEdges, nodes, variables]);
+
+  const removeVariableFromText = useCallback(
+    (variableName) => {
+      const escaped = variableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\{\\{\\s*${escaped}\\s*\\}\\}\\s*`, 'g');
+      const nextText = currText.replace(regex, ' ').replace(/\s{2,}/g, ' ').trim();
+      setCurrText(nextText);
+      updateNodeField(id, 'text', nextText);
+    },
+    [currText, id, updateNodeField]
+  );
+
+  const removeAllMissingVariables = useCallback(() => {
+    let nextText = currText;
+    missing.forEach((variableName) => {
+      const escaped = variableName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\{\\{\\s*${escaped}\\s*\\}\\}\\s*`, 'g');
+      nextText = nextText.replace(regex, ' ');
+    });
+    nextText = nextText.replace(/\s{2,}/g, ' ').trim();
+    setCurrText(nextText);
+    updateNodeField(id, 'text', nextText);
+  }, [currText, id, missing, updateNodeField]);
+
+  const variableHandleIds = useMemo(() => {
+    return variables
+      .map((v) => `${id}-${v}`)
+      .filter((handleId) => handleId !== genericInputHandleId);
+  }, [genericInputHandleId, id, variables]);
+
+  const syncEdges = useCallback(() => {
+    const state = useStore.getState();
+    const latestNodes = state.nodes;
+    const latestEdges = state.edges;
+    console.log('🟣 SyncEdges START');
+    console.log('Desired variables:', variables);
+    console.log(
+      'Existing edges:',
+      latestEdges.map((e) => ({
+        source: e.source,
+        target: e.target,
+        targetHandle: e.targetHandle,
+        variable: e.data?.variableName,
+      }))
+    );
+
+    const latestInputByName = new Map();
+    latestNodes.forEach((node) => {
+      if (node.type !== 'customInput') return;
+      const resolved = resolveInputName(node);
+      if (resolved) latestInputByName.set(resolved, node);
+    });
+
+    const desiredConnections = [];
+    variables.forEach((variableName) => {
+      const handleId = `${id}-${variableName}`;
+      const handleExists =
+        variableHandleIds.includes(handleId) || handleId === genericInputHandleId;
+      if (!handleExists) return;
+
+      const inputNode = latestInputByName.get(variableName);
+      if (!inputNode) return;
+
+      desiredConnections.push({
+        source: inputNode.id,
+        sourceHandle: `${inputNode.id}-value`,
+        target: id,
+        targetHandle: handleId,
+        data: {
+          type: 'variable',
+          createdBy: id,
+          variableName,
+        },
+      });
+    });
+
+    const existingInputTextEdges = latestEdges.filter((edge) => {
+      if (edge.target !== id) return false;
+      const sourceNode = latestNodes.find((n) => n.id === edge.source);
+      return sourceNode?.type === 'customInput';
+    });
+
+    const existingByKey = new Map(
+      existingInputTextEdges.map((edge) => [
+        `${edge.source}|${edge.sourceHandle}|${edge.targetHandle}`,
+        edge,
+      ])
+    );
+
+    const desiredKeys = new Set(
+      desiredConnections.map((c) => `${c.source}|${c.sourceHandle}|${c.targetHandle}`)
+    );
+
+    // Add missing desired edges only (prevent duplicates).
+    desiredConnections.forEach((connection) => {
+      const key = `${connection.source}|${connection.sourceHandle}|${connection.targetHandle}`;
+      const variableEdgeAlreadyExists = hasVariableEdge(
+        useStore.getState().edges,
+        connection.data.variableName
+      );
+      if (!existingByKey.has(key) && !variableEdgeAlreadyExists) {
+        console.log('➕ Adding edge for variable:', connection.data.variableName);
+        state.onConnect(connection);
+      }
+    });
+
+    // Remove only variable edges created by this Text node.
+    existingInputTextEdges.forEach((edge) => {
+      const isVariableEdgeForThisText =
+        edge.data?.type === 'variable' && edge.data?.createdBy === id;
+      if (!isVariableEdgeForThisText) return;
+
+      const key = `${edge.source}|${edge.sourceHandle}|${edge.targetHandle}`;
+      if (!desiredKeys.has(key)) {
+        const latestStillExists = useStore.getState().edges.some((e) => e.id === edge.id);
+        if (latestStillExists) {
+          console.log('❌ Removing edge:', edge.id);
+          state.deleteEdge(edge.id);
+        }
+      }
+    });
+
+    // If we have variable-specific edge from same source, clean generic manual edge.
+    const latestAfterChanges = useStore.getState().edges;
+    latestAfterChanges.forEach((edge) => {
+      if (edge.target !== id || edge.targetHandle !== genericInputHandleId) return;
+      const hasSpecificForSource = desiredConnections.some((c) => c.source === edge.source);
+      if (hasSpecificForSource) {
+        const stillExists = useStore.getState().edges.some((e) => e.id === edge.id);
+        if (stillExists) {
+          console.log('❌ Removing edge:', edge.id);
+          state.deleteEdge(edge.id);
+        }
+      }
+    });
+
+    setTimeout(() => {
+      const finalEdges = useStore.getState().edges;
+      console.log('🧪 FINAL CHECK');
+      console.log('Variables:', variables);
+      console.log('Edges:', finalEdges);
+      variables.forEach((v) => {
+        const expectedHandle = `${id}-${v}`;
+        const edgeExists = finalEdges.some((e) => e.targetHandle === expectedHandle);
+        console.log(`🔎 ${v}:`, {
+          handle: expectedHandle,
+          edgeExists,
+        });
+      });
+    }, 100);
+  }, [genericInputHandleId, hasVariableEdge, id, variableHandleIds, variables]);
+
+  // Order: parse variables -> render handles -> update internals -> wait -> sync edges
+  useEffect(() => {
+    syncVersionRef.current += 1;
+    const currentVersion = syncVersionRef.current;
+
+    console.log('⚙️ Updating node internals for:', id);
+    updateNodeInternals(id);
+
+    const timer = setTimeout(() => {
+      if (currentVersion !== syncVersionRef.current) return;
+      syncEdges();
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [id, syncEdges, updateNodeInternals, variables]);
+
+  // Autocomplete suggestions are shown when user is inside an open "{{...".
+  const autocompleteQuery = useMemo(() => {
+    const beforeCaret = currText.slice(0, caretIndex);
+    const openIndex = beforeCaret.lastIndexOf('{{');
+    if (openIndex < 0) return null;
+
+    const maybeToken = beforeCaret.slice(openIndex + 2);
+    // If current token already closed, do not suggest.
+    if (maybeToken.includes('}}')) return null;
+
+    return {
+      openIndex,
+      query: maybeToken.trim(),
+    };
+  }, [caretIndex, currText]);
+
+  const suggestions = useMemo(() => {
+    if (!autocompleteQuery) return [];
+    const q = autocompleteQuery.query.toLowerCase();
+    const candidates = inputNames.filter((name) =>
+      name.toLowerCase().includes(q)
+    );
+    return candidates.slice(0, 8);
+  }, [autocompleteQuery, inputNames]);
+
+  useEffect(() => {
+    const shouldOpen = Boolean(autocompleteQuery) && suggestions.length > 0;
+    setAutocompleteOpen(shouldOpen);
+    setActiveSuggestionIndex(0);
+  }, [autocompleteQuery, suggestions.length]);
+
+  const applySuggestion = useCallback(
+    (name) => {
+      if (!autocompleteQuery) return;
+      const before = currText.slice(0, autocompleteQuery.openIndex);
+      const after = currText.slice(caretIndex);
+      const inserted = `{{${name}}}`;
+      const nextText = `${before}${inserted}${after}`;
+      const nextCaret = before.length + inserted.length;
+
+      setCurrText(nextText);
+      updateNodeField(id, 'text', nextText);
+      setAutocompleteOpen(false);
+
+      requestAnimationFrame(() => {
+        if (!textareaRef.current) return;
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(nextCaret, nextCaret);
+        setCaretIndex(nextCaret);
+      });
+    },
+    [autocompleteQuery, caretIndex, currText, id, updateNodeField]
+  );
+
+  const handleTextareaKeyDown = (e) => {
+    if (!autocompleteOpen || suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveSuggestionIndex((prev) => (prev + 1) % suggestions.length);
+      return;
+    }
+
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveSuggestionIndex((prev) => (prev - 1 + suggestions.length) % suggestions.length);
+      return;
+    }
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const selected = suggestions[activeSuggestionIndex];
+      if (selected) applySuggestion(selected);
+      return;
+    }
+
+    if (e.key === 'Escape') {
+      setAutocompleteOpen(false);
+    }
+  };
+
+  const inputHandles = useMemo(() => {
+    // Always keep a generic input handle so users can manually connect first.
+    const variableIds = variables
+      .map((v) => `${id}-${v}`)
+      .filter((handleId) => handleId !== genericInputHandleId);
+    const ids = [genericInputHandleId, ...variableIds];
+    const total = ids.length;
+
+    return ids.map((handleId, index) => ({
+      id: handleId,
+      style: { top: `${((index + 1) * 100) / (total + 1)}%` },
+    }));
+  }, [genericInputHandleId, id, variables]);
+  console.log('🟢 Rendering Handles:', variableHandleIds);
+
+  useEffect(() => {
+    setTimeout(() => {
+      variables.forEach((v) => {
+        const el = document.querySelector(`[data-handleid="${id}-${v}"]`);
+        console.log(`🔍 Handle DOM check for ${v}:`, !!el);
+      });
+    }, 0);
+  }, [id, variables]);
+
   // Auto-resizing textarea for better visibility as user types
   // (resize disabled; height follows scrollHeight so the full text stays visible)
-  const textareaRef = useRef(null);
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
@@ -66,11 +435,11 @@ export const TextNode = ({ id, data }) => {
     <BaseNode
       id={id}
       title="Text"
-      inputs={variables.map((v) => ({ id: `${id}-${v}` }))}
+      inputs={inputHandles}
       outputs={[{ id: `${id}-output` }]}
     >
       <div>
-        <div>
+      <div>
           <label htmlFor={textareaId} className="form-label mb-0">
             Text
           </label>
@@ -78,24 +447,62 @@ export const TextNode = ({ id, data }) => {
             ref={textareaRef}
             id={textareaId}
             className="form-control form-control-sm"
-            value={currText}
-            onChange={handleTextChange}
+            value={currText} 
+            onChange={handleTextChange} 
+            onKeyDown={handleTextareaKeyDown}
+            onClick={(e) => setCaretIndex(e.target.selectionStart || 0)}
+            onKeyUp={(e) => setCaretIndex(e.target.selectionStart || 0)}
             style={{ width: '100%', resize: 'none', overflow: 'hidden' }}
           />
+          {autocompleteOpen ? (
+            <div
+              style={{
+                position: 'absolute',
+                marginTop: 4,
+                zIndex: 50,
+                width: '100%',
+                maxHeight: 180,
+                overflowY: 'auto',
+                background: '#fff',
+                border: '1px solid rgba(0,0,0,0.15)',
+                borderRadius: 8,
+                boxShadow: '0 6px 20px rgba(0,0,0,0.12)',
+              }}
+            >
+              {suggestions.map((name, idx) => (
+                <button
+                  key={name}
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => applySuggestion(name)}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    border: 'none',
+                    background: idx === activeSuggestionIndex ? '#eef2ff' : '#fff',
+                    padding: '8px 10px',
+                    fontSize: 13,
+                  }}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
-        {variables.length > 0 ? (
+        {variables.length > 0 || parsedTokenInfo.invalidVariables.length > 0 ? (
           <div style={{ marginTop: 8 }}>
             {variables.map((v) => {
               const isMissing = missingSet.has(v);
-              return (
-                <div
-                  key={v}
-                  style={{ color: isMissing ? 'red' : 'black' }}
-                >
-                  {v} {isMissing ? '❌ missing input' : '✅'}
-                </div>
-              );
+              if (!isMissing) return null;
+
+              return <div key={v} style={{ color: 'red' }}>{v} ❌ missing input</div>;
             })}
+            {parsedTokenInfo.invalidVariables.map((v) => (
+              <div key={`invalid-${v}`} style={{ color: 'red' }}>
+                {v} ❌ invalid name
+              </div>
+            ))}
           </div>
         ) : null}
       </div>

@@ -15,6 +15,7 @@ import { ConcatNode } from './nodes/concatNode';
 import { TransformNode } from './nodes/transformNode';
 import { IfNode } from './nodes/ifNode';
 import { SplitNode } from './nodes/splitNode';
+import { DeletableEdge } from './edges/deletableEdge';
 
 import 'reactflow/dist/style.css';
 
@@ -30,6 +31,9 @@ const nodeTypes = {
   transform: TransformNode,
   if: IfNode,
   split: SplitNode,
+};
+const edgeTypes = {
+  deletable: DeletableEdge,
 };
 console.log('🧩 nodeTypes keys', Object.keys(nodeTypes));
 
@@ -115,9 +119,10 @@ export const PipelineUI = () => {
           onDragOver={onDragOver}
           onInit={setReactFlowInstance}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           proOptions={proOptions}
           snapGrid={[gridSize, gridSize]}
-          connectionLineType='smoothstep'
+          connectionLineType='bezier'
           style={{ width: '100%', height: '100%' }}
         >
           <Background variant="dots" gap={gridSize} color="#000000" />

@@ -38,17 +38,22 @@ export const useStore = create((set, get) => ({
       });
     },
     onConnect: (connection) => {
-      console.log('🔵 New Connection', connection);
+      console.log('🔵 onConnect called with:', connection);
+      const edgeData = connection?.data?.type
+        ? connection.data
+        : { ...(connection?.data || {}), type: 'manual' };
+      console.log('🔵 Edge data:', edgeData);
       set({
         edges: addEdge({
           ...connection,
-          type: 'smoothstep',
+          type: 'deletable',
+          data: edgeData,
           animated: true,
-          style: { stroke: '#009DFF', strokeWidth: 2 },
-          markerEnd: { type: MarkerType.Arrow, color: '#009DFF', height: '13px', width: '13px' }
+          style: { stroke: '#6366F1', strokeWidth: 2 },
+          markerEnd: { type: MarkerType.Arrow, color: '#6366F1', height: '13px', width: '13px' }
         }, get().edges),
       });
-      console.log('🔵 Edges after connect', get().edges);
+      console.log('🔵 Edges after connect:', get().edges);
     },
     updateNodeField: (nodeId, fieldName, fieldValue) => {
       set({
@@ -65,6 +70,11 @@ export const useStore = create((set, get) => ({
       set({
         nodes: get().nodes.filter((node) => node.id !== nodeId),
         edges: get().edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
+      });
+    },
+    deleteEdge: (edgeId) => {
+      set({
+        edges: get().edges.filter((edge) => edge.id !== edgeId),
       });
     },
     clearAll: () => {
