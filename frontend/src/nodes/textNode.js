@@ -23,6 +23,7 @@ export const TextNode = ({ id, data }) => {
   const syncVersionRef = useRef(0);
   const updateNodeInternals = useUpdateNodeInternals();
   const textareaRef = useRef(null);
+  const autocompleteWrapRef = useRef(null);
   const [caretIndex, setCaretIndex] = useState(0);
   const [autocompleteOpen, setAutocompleteOpen] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
@@ -346,6 +347,20 @@ export const TextNode = ({ id, data }) => {
     setActiveSuggestionIndex(0);
   }, [autocompleteQuery, suggestions.length]);
 
+  useEffect(() => {
+    const handleDocumentMouseDown = (event) => {
+      if (!autocompleteWrapRef.current) return;
+      if (!autocompleteWrapRef.current.contains(event.target)) {
+        setAutocompleteOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown);
+    };
+  }, []);
+
   const applySuggestion = useCallback(
     (name) => {
       if (!autocompleteQuery) return;
@@ -438,7 +453,7 @@ export const TextNode = ({ id, data }) => {
       inputs={inputHandles}
       outputs={[{ id: `${id}-output` }]}
     >
-      <div>
+        <div ref={autocompleteWrapRef}>
       <div>
           <label htmlFor={textareaId} className="form-label mb-0">
             Text

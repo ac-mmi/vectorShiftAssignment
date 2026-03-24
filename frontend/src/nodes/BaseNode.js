@@ -50,10 +50,6 @@ export const BaseNode = ({ id, title, inputs = [], outputs = [], children }) => 
   };
 
   const iconTheme = iconThemeByTitle[normalizedTitle] || { color: '#6c757d'};
-  const rootStyle = {
-    borderColor: 'rgba(0,0,0,0.1)',
-  };
-
   const handleAddNode = (event) => {
     event.stopPropagation();
 
@@ -82,7 +78,14 @@ export const BaseNode = ({ id, title, inputs = [], outputs = [], children }) => 
   };
 
   return (
-    <div className="base-node d-flex flex-column" style={rootStyle}>
+    <div
+      className="base-node d-flex flex-column"
+      tabIndex={0}
+      onMouseDown={(event) => {
+        // Keep node focus in sync with click interactions for border highlight.
+        event.currentTarget.focus();
+      }}
+    >
       <div className="base-node__actions">
         <button
           type="button"

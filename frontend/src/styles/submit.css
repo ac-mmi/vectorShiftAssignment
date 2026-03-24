@@ -34,3 +34,126 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+.submit-button-wrap > button.submit-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.submit-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(17, 24, 39, 0.2);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  animation: submitOverlayFade 180ms ease forwards;
+}
+
+.submit-modal {
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%) translateY(10px);
+  opacity: 0;
+  animation: submitModalEnter 200ms ease forwards;
+  background-color: white;
+  width: min(560px, calc(100vw - 24px));
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.2);
+  overflow: hidden;
+}
+
+.submit-modal.is-success {
+  border-color: rgba(16, 185, 129, 0.25);
+}
+.submit-modal.is-error {
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.submit-modal.is-success::before,
+.submit-modal.is-error::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+}
+.submit-modal.is-success::before {
+  background: #22c55e;
+}
+.submit-modal.is-error::before {
+  background: #ef4444;
+}
+
+.submit-modal h5
+{
+  font-size: 15px !important;
+  font-weight: 500;
+}
+
+.submit-modal .modal-header
+{
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.submit-modal__body {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.submit-modal__body.is-error {
+  color: #b91c1c;
+}
+
+.submit-modal__body.is-success {
+  color: #0f172a;
+}
+
+.submit-modal__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+}
+.submit-modal__icon.is-success {
+  background: #dcfce7;
+  color: #16a34a;
+  border: 1px solid #86efac;
+}
+.submit-modal__icon.is-error {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+@keyframes submitOverlayFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes submitModalEnter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
