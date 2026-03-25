@@ -2,7 +2,7 @@ import { Handle, Position } from 'reactflow';
 import '../styles/baseNode.css';
 import { useStore } from '../store';
 
-export const BaseNode = ({ id, title, inputs = [], outputs = [], children }) => {
+export const BaseNode = ({ id, title, inputs = [], outputs = [], children, nodeStyle }) => {
   const deleteNode = useStore((state) => state.deleteNode);
   const addNode = useStore((state) => state.addNode);
   const getNodeID = useStore((state) => state.getNodeID);
@@ -85,6 +85,7 @@ export const BaseNode = ({ id, title, inputs = [], outputs = [], children }) => 
         // Keep node focus in sync with click interactions for border highlight.
         event.currentTarget.focus();
       }}
+      style={nodeStyle}
     >
       <div className="base-node__actions">
         <button

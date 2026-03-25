@@ -14,6 +14,9 @@ function resolveInputName(node) {
 export const TextNode = ({ id, data }) => {
   console.log('🟡 Rendering TextNode', id);
   const [currText, setCurrText] = useState(data?.text || '{{input}}');
+  // Allow users to resize the Text node manually (width/height) via drag handle.
+  const [manualWidth, setManualWidth] = useState(250);
+  const [fixedHeight, setFixedHeight] = useState(null); // null => "auto" height (driven by textarea content)
   const nodes = useStore((state) => state.nodes);
   const edges = useStore((state) => state.edges);
   const updateNodeField = useStore((state) => state.updateNodeField);
@@ -27,6 +30,8 @@ export const TextNode = ({ id, data }) => {
   const [caretIndex, setCaretIndex] = useState(0);
   const [autocompleteOpen, setAutocompleteOpen] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
+  const resizeHandleRef = useRef(null);
+  const rafResizeRef = useRef(null);
 
   const handleTextChange = (e) => {
     const nextText = e.target.value;
@@ -445,6 +450,55 @@ export const TextNode = ({ id, data }) => {
     el.style.height = `${el.scrollHeight}px`;
   }, [currText]);
 
+  // Drag-resize handler for the Text node (width + height).
+  const startResize = useCallback(
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const handleEl = resizeHandleRef.current;
+      const baseEl = handleEl ? handleEl.closest('.base-node') : null;
+      if (!baseEl) return;
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startRect = baseEl.getBoundingClientRect();
+
+      const startWidth = startRect.width;
+      const startHeight = startRect.height;
+
+      const minW = 220;
+      const minH = 90;
+
+      const onMove = (moveEvent) => {
+        const dx = moveEvent.clientX - startX;
+        const dy = moveEvent.clientY - startY;
+
+        const nextW = Math.max(minW, Math.round(startWidth + dx));
+        const nextH = Math.max(minH, Math.round(startHeight + dy));
+
+        // Avoid flooding state updates; coalesce via rAF.
+        if (rafResizeRef.current) cancelAnimationFrame(rafResizeRef.current);
+        rafResizeRef.current = requestAnimationFrame(() => {
+          setManualWidth(nextW);
+          setFixedHeight(nextH);
+          updateNodeInternals(id);
+        });
+      };
+
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        if (rafResizeRef.current) cancelAnimationFrame(rafResizeRef.current);
+        rafResizeRef.current = null;
+      };
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    },
+    [id, updateNodeInternals]
+  );
+
   return (
     // Pass detected variables as dynamic input handles to BaseNode.
     <BaseNode
@@ -452,6 +506,10 @@ export const TextNode = ({ id, data }) => {
       title="Text"
       inputs={inputHandles}
       outputs={[{ id: `${id}-output` }]}
+      nodeStyle={{
+        width: manualWidth,
+        ...(fixedHeight ? { height: fixedHeight } : null),
+      }}
     >
         <div ref={autocompleteWrapRef}>
       <div>
@@ -521,6 +579,28 @@ export const TextNode = ({ id, data }) => {
           </div>
         ) : null}
       </div>
+
+      {/* Resize grip: only affects TextNode sizing (width + height). */}
+      <div
+        ref={resizeHandleRef}
+        onMouseDown={startResize}
+        className="nodrag nopan"
+        style={{
+          position: 'absolute',
+          right: 4,
+          bottom: 4,
+          width: 14,
+          height: 14,
+          cursor: 'nwse-resize',
+          touchAction: 'none',
+          borderRadius: 3,
+          background: 'rgba(99, 102, 241, 0.35)',
+          border: '1px solid rgba(99, 102, 241, 0.65)',
+          zIndex: 30,
+        }}
+        title="Resize Text node"
+        aria-label="Resize Text node"
+      />
     </BaseNode>
   );
 }

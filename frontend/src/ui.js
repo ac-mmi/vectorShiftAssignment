@@ -47,7 +47,7 @@ const selector = (state) => ({
   onConnect: state.onConnect,
 });
 
-export const PipelineUI = () => {
+export const PipelineUI = ({ isDarkMode }) => {
     const reactFlowWrapper = useRef(null);
     const [reactFlowInstance, setReactFlowInstance] = useState(null);
     const {
@@ -125,7 +125,7 @@ export const PipelineUI = () => {
           connectionLineType='bezier'
           style={{ width: '100%', height: '100%' }}
         >
-          <Background variant="dots" gap={gridSize} color="#000000" />
+          <Background variant="dots" gap={gridSize} color={isDarkMode ? '#334155' : '#000000'} />
           <Controls />
           <MiniMap />
         </ReactFlow>

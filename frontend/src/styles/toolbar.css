@@ -3,6 +3,7 @@
   border-bottom: 1px solid rgba(99, 102, 241, 0.35);
   box-shadow: 0 4px 14px rgba(2, 6, 23, 0.35);
   padding: 8px 10px 10px;
+  position: relative;
 }
 
 .pipeline-toolbar__tabs {
@@ -53,6 +54,47 @@
   overflow-x: auto;
   padding-top: 2px;
   animation: ribbonFade 0.2s ease;
+}
+
+/* Top-right theme toggle (kept visually consistent with the toolbar ribbon) */
+.pipeline-toolbar__theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  position: sticky;
+  right: 0;
+  z-index: 11;
+  flex: 0 0 auto;
+}
+
+.pipeline-toolbar__theme-toggle-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pipeline-toolbar__theme-toggle-label {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(129, 140, 248, 0.45);
+  background: rgba(42, 47, 117, 0.65);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pipeline-toolbar__theme-toggle-label:hover {
+  border-color: rgba(165, 180, 252, 0.9);
+  background: rgba(52, 59, 143, 0.75);
+}
+
+.pipeline-toolbar__theme-toggle-icon {
+  font-size: 18px;
+  color: #eef0ff;
 }
 
 .pipeline-toolbar__group {

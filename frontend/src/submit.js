@@ -56,7 +56,10 @@ export const SubmitButton = () => {
     return (
         <>
             <div className="d-flex align-items-center justify-content-between gap-2 submit-button-wrap">
-                <button type="button" className="btn btn-outline-danger clear-all-button" onClick={clearAll}>Clear All</button>
+                <button type="button" className="btn btn-outline-danger clear-all-button" onClick={clearAll}>
+                    Clear All
+                </button>
+
                 <button type="button" className="btn btn-primary submit-button" onClick={handleSubmit} disabled={isSubmitting}>
                     {isSubmitting ? 'Submitting...' : 'Submit'}
                 </button>

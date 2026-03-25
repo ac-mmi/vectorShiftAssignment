@@ -13,15 +13,15 @@
   box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.1);
 }
 
-.submit-button-wrap  > button.clear-all-button  {
+.submit-button-wrap  .clear-all-button  {
   border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 30px;
-  padding: 5px 12px;
+  border-radius: 30px !important;
+  padding: 5px 12px !important;
   background: rgba(255, 255, 255, 0.9);
   color: rgba(0, 0, 0, 0.9);
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
 }
 
 .submit-button-wrap  > button.submit-button  {

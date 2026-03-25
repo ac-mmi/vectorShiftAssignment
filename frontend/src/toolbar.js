@@ -150,7 +150,7 @@ const RibbonAction = ({ icon, label }) => {
   );
 };
 
-export const PipelineToolbar = () => {
+export const PipelineToolbar = ({ isDarkMode, onToggleDarkMode }) => {
   const [activeTab, setActiveTab] = useState('General');
   const groups = useMemo(() => TAB_GROUPS[activeTab] || [], [activeTab]);
 
@@ -173,6 +173,28 @@ export const PipelineToolbar = () => {
             {tab}
           </button>
         ))}
+
+        <div className="pipeline-toolbar__theme-toggle">
+          <input
+            className="pipeline-toolbar__theme-toggle-input"
+            type="checkbox"
+            role="switch"
+            id="themeSwitchToolbar"
+            checked={!!isDarkMode}
+            onChange={() => onToggleDarkMode && onToggleDarkMode()}
+          />
+          <label
+            className="pipeline-toolbar__theme-toggle-label"
+            htmlFor="themeSwitchToolbar"
+            title="Toggle dark mode"
+          >
+            <i
+              className={`bi ${
+                isDarkMode ? 'bi-moon-stars-fill' : 'bi-sun-fill'
+              } pipeline-toolbar__theme-toggle-icon`}
+            />
+          </label>
+        </div>
       </div>
 
       <div className="pipeline-toolbar__panel">
