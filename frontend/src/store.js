@@ -7,6 +7,8 @@ import {
     applyEdgeChanges,
     MarkerType,
   } from 'reactflow';
+import { connectionAlreadyExists } from './utils/edgeValidation';
+import { syncVariableEdgesForAllTextNodes } from './utils/syncTextNodeVariableEdges';
 
 export const useStore = create((set, get) => ({
     nodes: [],
@@ -39,6 +41,9 @@ export const useStore = create((set, get) => ({
     },
     onConnect: (connection) => {
       console.log('🔵 onConnect called with:', connection);
+      if (connectionAlreadyExists(get().edges, connection)) {
+        return;
+      }
       const edgeData = connection?.data?.type
         ? connection.data
         : { ...(connection?.data || {}), type: 'manual' };
@@ -56,15 +61,22 @@ export const useStore = create((set, get) => ({
       console.log('🔵 Edges after connect:', get().edges);
     },
     updateNodeField: (nodeId, fieldName, fieldValue) => {
-      set({
-        nodes: get().nodes.map((node) => {
-          if (node.id === nodeId) {
-            node.data = { ...node.data, [fieldName]: fieldValue };
-          }
-  
-          return node;
-        }),
+      const nextNodes = get().nodes.map((node) => {
+        if (node.id === nodeId) {
+          return {
+            ...node,
+            data: { ...node.data, [fieldName]: fieldValue },
+          };
+        }
+
+        return node;
       });
+      const updatedNode = nextNodes.find((n) => n.id === nodeId);
+      const nextEdges = get().edges;
+      set({ nodes: nextNodes, edges: nextEdges });
+      if (fieldName === 'inputName' && updatedNode?.type === 'customInput') {
+        syncVariableEdgesForAllTextNodes(get);
+      }
     },
     deleteNode: (nodeId) => {
       set({

@@ -4,12 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BaseNode } from './BaseNode';
 import { useStore } from '../store';
 import { useUpdateNodeInternals } from 'reactflow';
-
-const fallbackFromId = (nodeId) => String(nodeId || '').replace('customInput-', 'input_');
-
-function resolveInputName(node) {
-  return String(node?.data?.inputName || '').trim() || fallbackFromId(node?.id);
-}
+import { parseVariableTokens, resolveInputName } from '../utils/variableHelpers';
+import { syncVariableEdgesForTextNode } from '../utils/syncTextNodeVariableEdges';
 
 export const TextNode = ({ id, data }) => {
   console.log('🟡 Rendering TextNode', id);
@@ -49,31 +45,7 @@ export const TextNode = ({ id, data }) => {
     [nodes]
   );
 
-  // Extract raw fully formed tokens from current text for warning UI.
-  const parsedTokenInfo = useMemo(() => {
-    const regex = /\{\{(.*?)\}\}/g;
-    const matches = [...currText.matchAll(regex)];
-    const validIdentifier = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
-    const seenValid = new Set();
-    const seenInvalid = new Set();
-    const validVariables = [];
-    const invalidVariables = [];
-
-    for (const match of matches) {
-      const candidate = String(match[1] || '').trim();
-      if (validIdentifier.test(candidate)) {
-        if (!seenValid.has(candidate)) {
-          seenValid.add(candidate);
-          validVariables.push(candidate);
-        }
-      } else if (candidate && !seenInvalid.has(candidate)) {
-        seenInvalid.add(candidate);
-        invalidVariables.push(candidate);
-      }
-    }
-
-    return { validVariables, invalidVariables };
-  }, [currText]);
+  const parsedTokenInfo = useMemo(() => parseVariableTokens(currText), [currText]);
 
   // Extract valid fully formed variables for sync.
   // Uses /{{(.*?)}}/g then validates JS-like identifier names.
@@ -108,18 +80,6 @@ export const TextNode = ({ id, data }) => {
       return sourceNode?.type === 'customInput';
     });
   }, [edges, id, nodes]);
-
-  const hasVariableEdge = useCallback(
-    (allEdges, variableName) =>
-      allEdges.some(
-        (edge) =>
-          edge.target === id &&
-          edge.data?.type === 'variable' &&
-          edge.data?.createdBy === id &&
-          edge.data?.variableName === variableName
-      ),
-    [id]
-  );
 
   // Edge -> variable awareness only (non-intrusive; no textarea mutation).
   const connectedVariables = useMemo(() => {
@@ -177,133 +137,9 @@ export const TextNode = ({ id, data }) => {
     updateNodeField(id, 'text', nextText);
   }, [currText, id, missing, updateNodeField]);
 
-  const variableHandleIds = useMemo(() => {
-    return variables
-      .map((v) => `${id}-${v}`)
-      .filter((handleId) => handleId !== genericInputHandleId);
-  }, [genericInputHandleId, id, variables]);
-
   const syncEdges = useCallback(() => {
-    const state = useStore.getState();
-    const latestNodes = state.nodes;
-    const latestEdges = state.edges;
-    console.log('🟣 SyncEdges START');
-    console.log('Desired variables:', variables);
-    console.log(
-      'Existing edges:',
-      latestEdges.map((e) => ({
-        source: e.source,
-        target: e.target,
-        targetHandle: e.targetHandle,
-        variable: e.data?.variableName,
-      }))
-    );
-
-    const latestInputByName = new Map();
-    latestNodes.forEach((node) => {
-      if (node.type !== 'customInput') return;
-      const resolved = resolveInputName(node);
-      if (resolved) latestInputByName.set(resolved, node);
-    });
-
-    const desiredConnections = [];
-    variables.forEach((variableName) => {
-      const handleId = `${id}-${variableName}`;
-      const handleExists =
-        variableHandleIds.includes(handleId) || handleId === genericInputHandleId;
-      if (!handleExists) return;
-
-      const inputNode = latestInputByName.get(variableName);
-      if (!inputNode) return;
-
-      desiredConnections.push({
-        source: inputNode.id,
-        sourceHandle: `${inputNode.id}-value`,
-        target: id,
-        targetHandle: handleId,
-        data: {
-          type: 'variable',
-          createdBy: id,
-          variableName,
-        },
-      });
-    });
-
-    const existingInputTextEdges = latestEdges.filter((edge) => {
-      if (edge.target !== id) return false;
-      const sourceNode = latestNodes.find((n) => n.id === edge.source);
-      return sourceNode?.type === 'customInput';
-    });
-
-    const existingByKey = new Map(
-      existingInputTextEdges.map((edge) => [
-        `${edge.source}|${edge.sourceHandle}|${edge.targetHandle}`,
-        edge,
-      ])
-    );
-
-    const desiredKeys = new Set(
-      desiredConnections.map((c) => `${c.source}|${c.sourceHandle}|${c.targetHandle}`)
-    );
-
-    // Add missing desired edges only (prevent duplicates).
-    desiredConnections.forEach((connection) => {
-      const key = `${connection.source}|${connection.sourceHandle}|${connection.targetHandle}`;
-      const variableEdgeAlreadyExists = hasVariableEdge(
-        useStore.getState().edges,
-        connection.data.variableName
-      );
-      if (!existingByKey.has(key) && !variableEdgeAlreadyExists) {
-        console.log('➕ Adding edge for variable:', connection.data.variableName);
-        state.onConnect(connection);
-      }
-    });
-
-    // Remove only variable edges created by this Text node.
-    existingInputTextEdges.forEach((edge) => {
-      const isVariableEdgeForThisText =
-        edge.data?.type === 'variable' && edge.data?.createdBy === id;
-      if (!isVariableEdgeForThisText) return;
-
-      const key = `${edge.source}|${edge.sourceHandle}|${edge.targetHandle}`;
-      if (!desiredKeys.has(key)) {
-        const latestStillExists = useStore.getState().edges.some((e) => e.id === edge.id);
-        if (latestStillExists) {
-          console.log('❌ Removing edge:', edge.id);
-          state.deleteEdge(edge.id);
-        }
-      }
-    });
-
-    // If we have variable-specific edge from same source, clean generic manual edge.
-    const latestAfterChanges = useStore.getState().edges;
-    latestAfterChanges.forEach((edge) => {
-      if (edge.target !== id || edge.targetHandle !== genericInputHandleId) return;
-      const hasSpecificForSource = desiredConnections.some((c) => c.source === edge.source);
-      if (hasSpecificForSource) {
-        const stillExists = useStore.getState().edges.some((e) => e.id === edge.id);
-        if (stillExists) {
-          console.log('❌ Removing edge:', edge.id);
-          state.deleteEdge(edge.id);
-        }
-      }
-    });
-
-    setTimeout(() => {
-      const finalEdges = useStore.getState().edges;
-      console.log('🧪 FINAL CHECK');
-      console.log('Variables:', variables);
-      console.log('Edges:', finalEdges);
-      variables.forEach((v) => {
-        const expectedHandle = `${id}-${v}`;
-        const edgeExists = finalEdges.some((e) => e.targetHandle === expectedHandle);
-        console.log(`🔎 ${v}:`, {
-          handle: expectedHandle,
-          edgeExists,
-        });
-      });
-    }, 100);
-  }, [genericInputHandleId, hasVariableEdge, id, variableHandleIds, variables]);
+    syncVariableEdgesForTextNode(id, useStore.getState);
+  }, [id]);
 
   // Order: parse variables -> render handles -> update internals -> wait -> sync edges
   useEffect(() => {
@@ -429,7 +265,7 @@ export const TextNode = ({ id, data }) => {
       style: { top: `${((index + 1) * 100) / (total + 1)}%` },
     }));
   }, [genericInputHandleId, id, variables]);
-  console.log('🟢 Rendering Handles:', variableHandleIds);
+  console.log('🟢 Rendering Handles for variables:', variables);
 
   useEffect(() => {
     setTimeout(() => {
