@@ -36,6 +36,7 @@ Goal: explain **what you built**, **how it’s structured**, **how you approache
 - **Canvas**: `frontend/src/ui.js`
 - **Store**: `frontend/src/store.js`
 - **Nodes**: `frontend/src/nodes/*` (+ `BaseNode.js`)
+- **Text variable / edge sync helpers**: `frontend/src/utils/syncTextNodeVariableEdges.js`, `frontend/src/utils/variableHelpers.js`
 - **Submit + modal**: `frontend/src/submit.js`
 - **Backend**: `backend/main.py`
 - **Styling**: `frontend/src/styles/*`
@@ -149,6 +150,7 @@ Pick only 1–2 points:
 
 - In Text, type: `Summarize {{pdf}} with title {{title}}`
 - Show that two left handles appear for `pdf` and `title`
+- (Optional) Rename a connected **Input** so it no longer matches a token → show the variable edge go away; rename it back to match `{{...}}` → edge can sync again
 
 ### C) Edge delete UX
 
